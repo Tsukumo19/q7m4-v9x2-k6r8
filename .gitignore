@@ -1,0 +1,3 @@
+.env*
+*.private.sql
+node_modules/

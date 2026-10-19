@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>酒馆骰子账簿</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><a class="brand" href="./">骰 / 酒馆账簿</a><button id="refresh" type="button">刷新账簿</button></header>
+<main>
+<section class="intro"><p class="muted">D&D · 骰子锦标赛</p><h1>骰子落定，<br>金币入账。</h1><p>故事继续留在聊天里。这里记下桌上的点数与输赢。</p><p id="connection" role="status">正在打开账簿…</p></section>
+<section aria-labelledby="ranking-title"><div class="section-title"><h2 id="ranking-title">公开排行榜</h2><span>按金币净收益排序 · GP</span></div><p class="muted">最高点数采用公布值。场次为已完成比赛，赌局为其中下注大于 0 的比赛。</p><div id="ranking"></div><p class="muted">“待补录”表示历史记录尚不完整；数字带“+”时表示已知下限。</p></section>
+<section aria-labelledby="history-title"><div class="section-title"><h2 id="history-title">桌上记录</h2><span>最近 100 条</span></div><div id="history"></div></section>
+<details id="admin"><summary>管理员账台</summary><p>登录后才可录入结果及查看私密记录。</p>
+<form id="login"><label>管理员邮箱<input name="email" type="email" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button>登录账台</button></form>
+<div id="desk" hidden><button id="logout" type="button">退出登录</button><form id="result"><h3>录入比赛结果</h3><div class="pair"><label>选手甲<select name="a" required></select></label><label>选手乙<select name="b" required></select></label></div><div class="pair"><label>甲公布点数<input name="score_a" type="number" min="0" max="1000000" step="1" required></label><label>乙公布点数<input name="score_b" type="number" min="0" max="1000000" step="1" required></label></div><label>每位选手下注（GP）<input name="stake" type="number" min="0" max="1000000" step="0.5" value="0" required></label><details><summary>私密真实点数（可选）</summary><div class="pair"><label>甲真实点数<input name="real_a" type="number" min="0" max="1000000" step="1"></label><label>乙真实点数<input name="real_b" type="number" min="0" max="1000000" step="1"></label></div><label>管理员备注<textarea name="secret" maxlength="2000"></textarea></label></details><p>按公布点数结算。赢家净赚一份赌注，输家扣除同额；平局盈亏为 0。不自动掷骰。</p><output id="calculation" aria-live="polite">填入点数后显示结算预览。</output><label class="check"><input name="confirmed" type="checkbox" required>已核对公布点数与赌注，确认写入账簿</label><button id="save">保存比赛结果</button></form><h3>私密记录</h3><div id="secrets"></div></div><p id="admin-message" role="status"></p></details>
+</main><footer>酒馆记账处 · 剧情与掷骰仍在原聊天</footer>
+<script src="config.js"></script><script type="module" src="app.js"></script>
+</body></html>
