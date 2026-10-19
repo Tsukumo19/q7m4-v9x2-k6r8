@@ -44,7 +44,9 @@ export function createHandler({baseUrl,publishableKey,resource,allowedClientIds=
   return async req=>{
     const url=new URL(req.url);
     if(url.pathname.endsWith('/.well-known/oauth-protected-resource')) return json({resource,authorization_servers:[issuer],bearer_methods_supported:['header']});
-    if(url.pathname.replace(/\/$/,'')!==new URL(resource).pathname) return json({error:'Not found'},404);
+    // Supabase's gateway removes /functions/v1 before invoking the runtime.
+    const pathname=url.pathname.replace(/\/$/,'');
+    if(![new URL(resource).pathname,'/'+new URL(resource).pathname.split('/').pop()].includes(pathname)) return json({error:'Not found'},404);
     // Browser requests are limited to the ledger site; native MCP has no Origin.
     const origin=req.headers.get('Origin');
     if(origin && origin!=='https://chatgpt.com') return json({error:'Origin denied'},403);
