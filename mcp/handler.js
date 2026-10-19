@@ -7,15 +7,60 @@ const properties = {
   score_a:{type:'integer',minimum:0,maximum:1000000},score_b:{type:'integer',minimum:0,maximum:1000000},
   net_gp:{type:'number',minimum:0,maximum:1000000,multipleOf:0.5,description:'Net amount won/lost, NOT the original wager. Do not infer a conversion rule.'}
 };
+const historicalProperties = {
+  request_id:{type:'string',format:'uuid',description:'Stable UUID for this archive row. Reuse unchanged after timeout or retry.'},
+  player_a:{type:'string',enum:playerIds},player_b:{type:'string',enum:playerIds},
+  score_a:{type:'integer',minimum:0,maximum:1000000},score_b:{type:'integer',minimum:0,maximum:1000000},
+  played_on:{type:'string',pattern:'^\\d{4}-\\d{2}-\\d{2}$',description:'Original match date in YYYY-MM-DD.'},
+  was_gamble:{type:'boolean',description:'Omit if historical wager status is unknown.'},
+  real_a:{type:'integer',minimum:0,maximum:1000000},real_b:{type:'integer',minimum:0,maximum:1000000},
+  secret:{type:'string',maxLength:2000,description:'Private administrator-only archival note. This text remains in this ChatGPT conversation.'}
+};
+const baselineProperties = {
+  player_id:{type:'string',enum:playerIds},
+  opening_max:{type:'integer',minimum:0,maximum:1000000},
+  opening_appearances:{type:'integer',minimum:0,maximum:1000000},
+  opening_gambles:{type:'integer',minimum:0,maximum:1000000},
+  mark_complete:{type:'boolean',description:'Set true only when these opening statistics are complete and all archived match gamble status is known.'}
+};
+const privateProperties = {
+  record_id:{type:'string',pattern:'^[a-zA-Z0-9_-]{1,100}$'},
+  label:{type:'string',minLength:1,maxLength:200},detail:{type:'string',minLength:1,maxLength:4000}
+};
 export const tools = [
   {name:'tavern_scoreboard',description:'Read the existing public Tavern ledger. Never returns true dice or secret notes.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,openWorldHint:false},securitySchemes:[{type:'noauth'}]},
-  {name:'tavern_record_match',description:'Submit one explicitly confirmed match to the existing ledger as the signed-in administrator. Use announced scores and net_gp. Preserve request_id on every retry. Secret dice and notes must be entered on the administrator website, never through this tool.',inputSchema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]}
+  {name:'tavern_record_match',description:'Submit one explicitly confirmed new match to the existing ledger as the signed-in administrator. Use announced scores and net_gp. Preserve request_id on every retry. Private historical evidence must use the dedicated archive tool.',inputSchema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
+  {name:'tavern_record_historical_match',description:'Archive one confirmed historical match in the existing ledger without changing balances. Public scores and date are recorded; real dice and secret go only to the private admin area. This private text remains in this ChatGPT conversation. Omit was_gamble if unknown. Reuse request_id unchanged on retries.',inputSchema:{type:'object',properties:historicalProperties,required:['request_id','player_a','player_b','score_a','score_b','played_on'],additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
+  {name:'tavern_update_history_baseline',description:'Fill missing historical statistics for one player. Values describe the baseline before archived match rows; opening GP is never accepted. Existing known values cannot be overwritten. Mark complete only when the submitted baseline is complete and gamble status is known for every archived match.',inputSchema:{type:'object',properties:baselineProperties,required:['player_id'],additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
+  {name:'tavern_record_private_archive',description:'Store a confirmed private historical cheat record in the existing administrator-only private archive. Never returned by public scoreboard or this tool. Its text remains in this ChatGPT conversation. Reuse record_id unchanged on retries.',inputSchema:{type:'object',properties:privateProperties,required:Object.keys(privateProperties),additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]}
 ];
+function exactObject(a, props, required) {
+  if(!a || typeof a!=='object' || Array.isArray(a) || Object.keys(a).some(k=>!Object.hasOwn(props,k)) || required.some(k=>!Object.hasOwn(a,k))) throw Error('Invalid fields');
+}
+function validScore(v){return Number.isInteger(v)&&v>=0&&v<=1000000;}
+function validString(v,min,max){return typeof v==='string'&&v.trim().length>=min&&v.length<=max;}
 export function validateMatch(a) {
   if(!a || typeof a!=='object' || Array.isArray(a) || Object.keys(a).length!==6 || Object.keys(a).some(k=>!Object.hasOwn(properties,k))) throw Error('Invalid match fields');
   if(!uuid.test(a.request_id) || !playerIds.includes(a.player_a) || !playerIds.includes(a.player_b) || a.player_a===a.player_b) throw Error('Invalid request or players');
   if(![a.score_a,a.score_b].every(v=>Number.isInteger(v)&&v>=0&&v<=1000000) || typeof a.net_gp!=='number' || !Number.isFinite(a.net_gp) || a.net_gp<0 || a.net_gp>1000000 || !Number.isInteger(a.net_gp*2)) throw Error('Invalid scores or net amount');
   return {p_request:a.request_id,p_a:a.player_a,p_b:a.player_b,p_score_a:a.score_a,p_score_b:a.score_b,p_stake:a.net_gp,p_real_a:null,p_real_b:null,p_secret:''};
+}
+export function validateHistorical(a) {
+  exactObject(a,historicalProperties,['request_id','player_a','player_b','score_a','score_b','played_on']);
+  if(!uuid.test(a.request_id)||!playerIds.includes(a.player_a)||!playerIds.includes(a.player_b)||a.player_a===a.player_b||!validScore(a.score_a)||!validScore(a.score_b)||!/^\d{4}-\d{2}-\d{2}$/.test(a.played_on)||Number.isNaN(Date.parse(a.played_on+'T00:00:00Z'))||new Date(a.played_on+'T00:00:00Z').toISOString().slice(0,10)!==a.played_on) throw Error('Invalid historical match');
+  if(a.was_gamble!==undefined&&typeof a.was_gamble!=='boolean') throw Error('Invalid gamble status');
+  if((a.real_a!==undefined&&!validScore(a.real_a))||(a.real_b!==undefined&&!validScore(a.real_b))||(a.secret!==undefined&&(!validString(a.secret,0,2000)))) throw Error('Invalid private details');
+  return {p_request:a.request_id,p_a:a.player_a,p_b:a.player_b,p_score_a:a.score_a,p_score_b:a.score_b,p_played_on:a.played_on,p_was_gamble:a.was_gamble??null,p_real_a:a.real_a??null,p_real_b:a.real_b??null,p_secret:a.secret??''};
+}
+export function validateBaseline(a) {
+  exactObject(a,baselineProperties,['player_id']);
+  if(!playerIds.includes(a.player_id)||Object.entries(a).some(([k,v])=>k!=='player_id'&&k!=='mark_complete'&&(!Number.isInteger(v)||v<0||v>1000000))||(a.mark_complete!==undefined&&typeof a.mark_complete!=='boolean')||Object.keys(a).length===1) throw Error('Invalid baseline fields');
+  return {p_player:a.player_id,p_opening_max:a.opening_max??null,p_opening_appearances:a.opening_appearances??null,p_opening_gambles:a.opening_gambles??null,p_mark_complete:a.mark_complete??false};
+}
+export function validatePrivate(a) {
+  exactObject(a,privateProperties,Object.keys(privateProperties));
+  if(!validString(a.record_id,1,100)||!validString(a.label,1,200)||!validString(a.detail,1,4000)) throw Error('Invalid private archive record');
+  return {p_record_id:a.record_id,p_label:a.label.trim(),p_detail:a.detail};
 }
 export function createHandler({baseUrl,publishableKey,resource,allowedClientIds=[],fetcher=fetch}) {
   const issuer=baseUrl+'/auth/v1';
@@ -60,23 +105,24 @@ export function createHandler({baseUrl,publishableKey,resource,allowedClientIds=
     const fail=(code,message)=>json({jsonrpc:'2.0',id:m.id??null,error:{code,message}});
     if(m.method.startsWith('notifications/')) return new Response(null,{status:202});
     if(m.id===undefined) return fail(-32600,'Request ID required');
-    if(m.method==='initialize') return ok({protocolVersion:['2025-03-26','2025-06-18','2025-11-25'].includes(m.params?.protocolVersion)?m.params.protocolVersion:'2025-03-26',capabilities:{tools:{listChanged:false}},serverInfo:{name:'Tavern',version:'1.0.0'},instructions:'Use the existing ledger only. A match requires user confirmation. Preserve its UUID and exact payload on retries. net_gp means net profit/loss, not original wager. Never claim success without a match receipt. Never submit legacy snapshots.'});
+    if(m.method==='initialize') return ok({protocolVersion:['2025-03-26','2025-06-18','2025-11-25'].includes(m.params?.protocolVersion)?m.params.protocolVersion:'2025-03-26',capabilities:{tools:{listChanged:false}},serverInfo:{name:'Tavern',version:'1.1.0'},instructions:'Use the existing ledger only. Confirm archival facts with the user. Historical matches never settle balances. Preserve stable IDs on retries. Baseline statistics describe the time before archived matches; opening GP cannot be changed. Private archive text remains in this ChatGPT conversation and is administrator-only in the ledger.'});
     if(m.method==='ping') return ok({});
     if(m.method==='tools/list') return ok({tools});
     if(m.method!=='tools/call') return fail(-32601,'Method not found');
     const name=m.params?.name,args=m.params?.arguments??{};
     if(!tools.some(t=>t.name===name)) return fail(-32602,'Unknown tool');
     let payload;
-    try { if(name==='tavern_record_match') payload=validateMatch(args); else if(Object.keys(args).length) throw Error('Unexpected arguments'); }
+    try { if(name==='tavern_record_match') payload=validateMatch(args); else if(name==='tavern_record_historical_match') payload=validateHistorical(args); else if(name==='tavern_update_history_baseline') payload=validateBaseline(args); else if(name==='tavern_record_private_archive') payload=validatePrivate(args); else if(Object.keys(args).length) throw Error('Unexpected arguments'); }
     catch(e){return fail(-32602,e.message);}
     const token=req.headers.get('Authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1];
-    if(name==='tavern_record_match' && !await authorized(token)) return challenge();
+    if(name!=='tavern_scoreboard' && !await authorized(token)) return challenge();
     try {
-      const data=await rpc(name==='tavern_scoreboard'?'scoreboard':'record_match',payload??{},name==='tavern_record_match'?token:undefined);
+      const rpcName={tavern_scoreboard:'scoreboard',tavern_record_match:'record_match',tavern_record_historical_match:'record_historical_match',tavern_update_history_baseline:'update_history_baseline',tavern_record_private_archive:'record_private_archive'}[name];
+      const data=await rpc(rpcName,payload??{},name==='tavern_scoreboard'?undefined:token);
       if(name==='tavern_record_match' && data!==args.request_id) throw Error('Receipt mismatch; verify ledger before retrying');
-      const result=name==='tavern_record_match'?{match_id:data,status:'recorded',player_a:args.player_a,player_b:args.player_b,delta_a:args.score_a===args.score_b?0:args.score_a>args.score_b?args.net_gp:-args.net_gp,delta_b:args.score_a===args.score_b?0:args.score_a>args.score_b?-args.net_gp:args.net_gp}:data;
+      if(name!=='tavern_scoreboard' && data!== (name==='tavern_update_history_baseline' ? args.player_id : name==='tavern_record_private_archive' ? args.record_id : args.request_id)) throw Error('Receipt mismatch; verify ledger before retrying');
+      const result=name==='tavern_record_match'?{match_id:data,status:'recorded',player_a:args.player_a,player_b:args.player_b,delta_a:args.score_a===args.score_b?0:args.score_a>args.score_b?args.net_gp:-args.net_gp,delta_b:args.score_a===args.score_b?0:args.score_a>args.score_b?-args.net_gp:args.net_gp}:name==='tavern_record_historical_match'?{match_id:data,status:'archived_without_settlement',player_a:args.player_a,player_b:args.player_b}:name==='tavern_update_history_baseline'?{player_id:data,status:'baseline_updated'}:name==='tavern_record_private_archive'?{record_id:data,status:'stored_privately'}:data;
       return ok({content:[{type:'text',text:JSON.stringify(result)}],isError:false});
     } catch(e) { return ok({content:[{type:'text',text:e.name==='TimeoutError'?'Outcome unknown. Check the ledger and retry with the SAME UUID and payload.':e.message}],isError:true}); }
   };
 }
-
