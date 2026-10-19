@@ -39,7 +39,7 @@ create function public.scoreboard() returns jsonb language sql stable security d
  case when p.opening_gambles is null and not exists(select 1 from tavern_private.matches m where p.id in(m.a,m.b) and m.stake>0) then null else coalesce(p.opening_gambles,0)+(select count(*) from tavern_private.matches m where p.id in(m.a,m.b) and m.stake>0) end as gambles
  from tavern_private.players p) s),
  'matches',coalesce((select jsonb_agg(to_jsonb(t) order by t.created_at desc,t.id) from (select id,a,b,score_a,score_b,stake,created_at from tavern_private.matches order by created_at desc,id limit 100) t),'[]'::jsonb),
- 'notices',case when exists(select 1 from tavern_private.matches where (a='toby' and b='hector') or (a='hector' and b='toby')) then jsonb_build_array('格里戈曾公布 60 点。该历史局已含在余额快照中，不重复结算。') else jsonb_build_array('托比对赫克托：尚未投骰，不计入已完成场次。','格里戈曾公布 60 点。该历史局已含在余额快照中，不重复结算。') end);
+ 'notices',case when exists(select 1 from tavern_private.matches where (a='toby' and b='hector') or (a='hector' and b='toby')) then '[]'::jsonb else jsonb_build_array('托比对赫克托：尚未投骰，不计入已完成场次。') end);
 $$;
 create function public.record_match(p_request uuid,p_a text,p_b text,p_score_a integer,p_score_b integer,p_stake numeric,p_real_a integer default null,p_real_b integer default null,p_secret text default '') returns uuid
 language plpgsql security definer set search_path='' as $$
