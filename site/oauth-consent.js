@@ -8,7 +8,8 @@ async function api(path,body){
 }
 function redirect(url){const u=new URL(url);if(u.origin!=='https://chatgpt.com')throw Error('授权回调地址不受信任。');location.assign(u.href);}
 async function load(){
-  if(!id || !/^[0-9a-f-]{36}$/i.test(id))throw Error('缺少有效授权编号。请从 ChatGPT 的 Tavern 插件发起连接。');
+  // Supabase authorization IDs are opaque strings, distinct from match UUIDs.
+  if(!id || !/^[A-Za-z0-9_-]{16,256}$/.test(id))throw Error('缺少有效授权编号。请从 ChatGPT 的 Tavern 插件发起连接。');
   if(!window.TAVERN_OAUTH_CLIENT_IDS?.length)throw Error('Tavern 连接尚未配置完成，暂不接受授权。');
   if(!token){$('#oauth-login').hidden=false;message('在此页面登录。不要把密码、验证码或令牌发到聊天。');return;}
   details=await api('/oauth/authorizations/'+encodeURIComponent(id));
