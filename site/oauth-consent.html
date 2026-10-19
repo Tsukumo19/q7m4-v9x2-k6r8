@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://gyclhkyjjmeifzyvzwlm.supabase.co; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'"><title>Tavern 连接授权</title><link rel="stylesheet" href="style.css"></head>
+<body><main><h1>Tavern 连接授权</h1><p id="message" role="status">正在检查授权请求…</p>
+<form id="oauth-login" hidden><label>管理员邮箱<input name="email" type="email" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button>登录并查看授权请求</button></form>
+<section id="consent" hidden><h2 id="client-name"></h2><p id="scopes"></p><p>允许这个连接读取公开排行榜，并以你的管理员身份录入比赛。不能读取真实骰点和秘密备注。每次录入前请核对比赛和净盈亏。</p><p id="redirect"></p><button id="approve" type="button">允许连接</button> <button id="deny" type="button">拒绝</button></section>
+<p><a href="./">返回账簿</a></p></main><script src="config.js"></script><script src="oauth-config.js"></script><script type="module" src="oauth-consent.js"></script></body></html>
+
