@@ -1,0 +1,37 @@
+# 酒馆骰子账簿
+
+静态网页部署至 GitHub Pages；Supabase 保存比赛、核验管理员。原聊天继续用于剧情和掷骰。
+
+## 本地预览
+
+在本目录运行 `npm run preview`，打开 http://127.0.0.1:4173 。未连接数据库时只展示初始快照，不能保存或假装登录。
+
+## 连接和上线
+
+1. 新建 Supabase 项目，在 SQL Editor 执行 `db/schema.sql` 一次。此脚本需表不存在；不要反复执行或在已有同名应用上覆盖。
+2. 在 Supabase Authentication 创建管理员邮箱/密码账户，复制其 UUID。在 SQL Editor 执行 `insert into tavern_private.admins(user_id) values ('此处替换为账户UUID');`。关闭不需要的公开注册；即使普通人注册也没有管理员权限。
+3. 单独执行本地 `db/legacy.private.sql` 导入历史秘密。文件被 Git 忽略，不要提交、放进网页或上传公开附件。
+4. 在 `site/config.js` 填入项目 HTTPS URL 和 **publishable key**（或旧 anon key）。这两项设计上公开，权限依靠数据库。绝对不要填 service_role、secret key 或管理员密码。
+5. 将 **tavern 目录内容作为仓库根目录**推送至确认过的 GitHub 仓库 main 分支。在仓库 Settings → Pages 选择 GitHub Actions。工作流只发布 `site/`，不发布数据库脚本、文档或本地秘密。
+6. 登录网页管理员账台，录入结果；另一台手机刷新验证公开榜。密码和访问令牌仅保存在当前页面内存，不写入配置或浏览器存储；页面刷新或令牌到期需重新登录。
+
+## 统计约定
+
+- 余额为提供的历史快照加新比赛净收益；不会把历史局再扣一次。
+- 等额下注，公布总点数较高者净赚一份赌注，低者损失同额，平局退回。允许 0 GP，步长 0.5 GP。真实点数仅供管理员审阅。
+- 出场次数计已完成比赛；赌局次数计其中下注大于 0 的比赛（包括平局）。尚未投骰不计数。
+- 历史最高点数、出场和赌局次数不完整时不虚构；已录新场次用 `+` 标明是下限。历史补齐后，管理员通过 SQL 校正 players 的 opening_* 字段并将 history_complete 设为 true。只补基线，不把旧比赛作为新结算录入。
+- 榜单不显示选手状态或胜负战绩。最近比赛记录只含公开点数及赌注；秘密通过单独 RPC 且必须有管理员白名单。
+- 提交 UUID 防止同一表单因断网重试而重复记账。录入错误暂由管理员通过 SQL 更正或删除对应比赛及 secrets；没有开放公共修改接口。
+
+## 权限核验（连接后必做）
+
+使用匿名 key 调用 scoreboard 应成功；调用 record_match/admin_records 应被拒绝。用普通登录账户重复上述测试也应被拒绝。管理员应可提交和查看秘密。直接请求任何私有表均应失败。查看公开 scoreboard 响应确认无 real_a、real_b、secret 或管理员身份。再检查公开仓库和 Pages 部署产物没有 `*.private.sql`。
+
+本地 `npm test` 验证结算、初始数据与公开文件泄密扫描；数据库 SQL 尚须在实际 Supabase 执行并完成上述权限验收。
+
+## 官方参考
+
+- [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Supabase 数据库函数与权限](https://supabase.com/docs/guides/database/functions)
+- [GitHub Pages 工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
