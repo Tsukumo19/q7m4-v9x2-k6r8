@@ -25,3 +25,9 @@ ChatGPT on the web supports custom MCP plugins with write tools: https://develop
 
 Rollback: disable the ChatGPT plugin and remove its client allowlist to stop writes. Keep the OAuth secret guard. No table or legacy data needs deletion.
 
+## Deployment record (2026-10-19)
+
+The sole public PKCE client is `a249d613-9635-4e8d-90a6-42e5fef15a05`. OAuth is enabled with dynamic registration disabled. The current first-party consent page is `/oauth-consent.html`. The MCP function is deployed at version 3 and both client allowlists are configured. `db/enable-tavern-client.sql` was applied after the initial denial guard: only this client can submit as an existing administrator, and OAuth requests cannot supply true scores or secret notes. Admin secrets remain inaccessible to OAuth clients.
+
+The database transaction tests passed and rolled back: approved OAuth administrator submission, same-UUID replay, payload conflict, unauthorized client, non-admin, secret read and secret write denial. No permanent test match was inserted. Local tests: 17 passed. The first real browser OAuth run found that authorization IDs are opaque (for example a 32-character lowercase string), not match UUIDs; the consent validator was corrected. Actual user login/consent and an ordinary-chat tool call are still pending. The installed personal plugin is `plugin_asdk_app_6ad6214814dc819192f00406210fd178` (Tavern 账簿). Do not create a duplicate.
+
