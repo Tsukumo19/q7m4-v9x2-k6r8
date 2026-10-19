@@ -1,10 +1,11 @@
+import {authErrorMessage} from './oauth-errors.js';
 const $=s=>document.querySelector(s),cfg=window.TAVERN_CONFIG;
 const id=new URL(location.href).searchParams.get('authorization_id');
 let token=null,details=null;
 const message=t=>{$('#message').textContent=t;};
 async function api(path,body){
   const r=await fetch(cfg.url+'/auth/v1'+path,{method:body?'POST':'GET',headers:{apikey:cfg.publishableKey,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
-  const d=await r.json();if(!r.ok)throw Error('授权请求失败，请重新登录或从 ChatGPT 重新发起连接。');return d;
+  const d=await r.json();if(!r.ok)throw Error(authErrorMessage(path,r.status,d.error_code??d.code));return d;
 }
 function redirect(url){const u=new URL(url);if(u.origin!=='https://chatgpt.com')throw Error('授权回调地址不受信任。');location.assign(u.href);}
 async function load(){
