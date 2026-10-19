@@ -13,7 +13,7 @@ function render(){
   });
   const history=$('#history');history.replaceChildren();
   for(const n of state.notices||[])history.append(el('p',n,'muted'));
-  for(const m of state.matches){const row=el('article','','record');const name=id=>state.players.find(p=>p.id===id)?.name||id;const [da,db]=settle(m.score_a,m.score_b,Number(m.stake));row.append(el('strong',`${name(m.a)} ${m.score_a} : ${m.score_b} ${name(m.b)}`),el('p',`胜负净额 ${m.stake} GP · ${name(m.a)} ${money(da)} / ${name(m.b)} ${money(db)} GP`),el('small',new Date(m.created_at).toLocaleString('zh-CN')));history.append(row);}
+  for(const m of state.matches){const row=el('article','','record');const name=id=>state.players.find(p=>p.id===id)?.name||id;const historical=m.settles_balance===false;const [da,db]=settle(m.score_a,m.score_b,Number(m.stake));row.append(el('strong',`${name(m.a)} ${m.score_a} : ${m.score_b} ${name(m.b)}`),el('p',historical?'历史赛程 · 不重复结算':`胜负净额 ${m.stake} GP · ${name(m.a)} ${money(da)} / ${name(m.b)} ${money(db)} GP`),el('small',m.played_on||new Date(m.created_at).toLocaleString('zh-CN')));history.append(row);}
   for(const sel of document.querySelectorAll('select')){const old=sel.value;sel.replaceChildren();for(const p of state.players){const o=el('option',p.name);o.value=p.id;sel.append(o);}if(old)sel.value=old;}
   if(!$('#result select[name=b]').dataset.ready){$('#result select[name=b]').selectedIndex=6;$('#result select[name=a]').selectedIndex=4;$('#result select[name=b]').dataset.ready='1';}
 }
@@ -39,4 +39,3 @@ $('#result').onsubmit=async e=>{
   }catch(err){$('#admin-message').textContent=`${err.message} 若网络中断，可直接重试；同一提交不会重复记账。`;}finally{$('#save').disabled=false;}
 };
 await refresh();
-
