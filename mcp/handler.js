@@ -35,11 +35,16 @@ const registerProperties={
   name:{type:'string',minLength:1,maxLength:80,description:'Public display name.'},
   opening_gp:{type:'number',minimum:-1000000,maximum:1000000,multipleOf:0.5,description:'Starting balance to add to the existing ledger. Confirm this value before registration.'}
 };
+const cheaterProperties={
+  player_id:playerIdSchema,
+  is_cheater:{type:'boolean',description:'Public 作弊者 badge. Set only after explicit administrator confirmation; never infer it from private notes or match counts.'}
+};
 export const tools = [
   {name:'tavern_scoreboard',description:'Read the existing public Tavern ledger. Never returns true dice or secret notes.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,openWorldHint:false},securitySchemes:[{type:'noauth'}]},
   {name:'tavern_list_players',description:'List every currently registered player and public career totals from the existing ledger. The roster is loaded dynamically, not fixed to the original eight. Never returns private dice or notes.',inputSchema:{type:'object',properties:{},additionalProperties:false},annotations:{readOnlyHint:true,openWorldHint:false},securitySchemes:[{type:'noauth'}]},
   {name:'tavern_get_player_profile',description:'Read one registered player’s public totals and match history. The current scoreboard exposes at most the latest 100 overall matches. Never returns true dice or private notes.',inputSchema:{type:'object',properties:profileProperties,required:['player_id'],additionalProperties:false},annotations:{readOnlyHint:true,openWorldHint:false},securitySchemes:[{type:'noauth'}]},
   {name:'tavern_register_player',description:'Register one confirmed new player in the existing ledger as the signed-in administrator. Requires a unique ID, public name, and confirmed starting GP. Does not change existing players or matches. Reuse request_id unchanged on retries.',inputSchema:{type:'object',properties:registerProperties,required:Object.keys(registerProperties),additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
+  {name:'tavern_set_player_cheater',description:'Set or clear the public 作弊者 badge for an existing player, only after the administrator explicitly confirms this public label. This never changes matches, balances, or private notes. The operation is idempotent.',inputSchema:{type:'object',properties:cheaterProperties,required:Object.keys(cheaterProperties),additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
   {name:'tavern_record_match',description:'Submit one explicitly confirmed new match to the existing ledger as the signed-in administrator. Use announced scores and net_gp. Preserve request_id on every retry. Private historical evidence must use the dedicated archive tool.',inputSchema:{type:'object',properties,required:Object.keys(properties),additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
   {name:'tavern_record_historical_match',description:'Archive one confirmed historical match in the existing ledger without changing balances. Public scores and date are recorded; real dice and secret go only to the private admin area. This private text remains in this ChatGPT conversation. Omit was_gamble if unknown. Reuse request_id unchanged on retries.',inputSchema:{type:'object',properties:historicalProperties,required:['request_id','player_a','player_b','score_a','score_b','played_on'],additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
   {name:'tavern_update_history_baseline',description:'Fill missing historical statistics for one player. Values describe the baseline before archived match rows; opening GP is never accepted. Existing known values cannot be overwritten. Mark complete only when the submitted baseline is complete and gamble status is known for every archived match.',inputSchema:{type:'object',properties:baselineProperties,required:['player_id'],additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false},securitySchemes:[{type:'oauth2',scopes:[]}]},
@@ -78,6 +83,11 @@ export function validateRegistration(a) {
   exactObject(a,registerProperties,Object.keys(registerProperties));
   if(!uuid.test(a.request_id)||!validPlayerId(a.player_id)||!validString(a.name,1,80)||typeof a.opening_gp!=='number'||!Number.isFinite(a.opening_gp)||Math.abs(a.opening_gp)>1000000||!Number.isInteger(a.opening_gp*2)) throw Error('Invalid player registration');
   return {p_request:a.request_id,p_player_id:a.player_id,p_name:a.name.trim(),p_opening_gp:a.opening_gp};
+}
+export function validateCheaterStatus(a) {
+  exactObject(a,cheaterProperties,Object.keys(cheaterProperties));
+  if(!validPlayerId(a.player_id)||typeof a.is_cheater!=='boolean') throw Error('Invalid public badge');
+  return {p_player_id:a.player_id,p_is_cheater:a.is_cheater};
 }
 export function createHandler({baseUrl,publishableKey,resource,allowedClientIds=[],fetcher=fetch}) {
   const issuer=baseUrl+'/auth/v1';
@@ -122,31 +132,32 @@ export function createHandler({baseUrl,publishableKey,resource,allowedClientIds=
     const fail=(code,message)=>json({jsonrpc:'2.0',id:m.id??null,error:{code,message}});
     if(m.method.startsWith('notifications/')) return new Response(null,{status:202});
     if(m.id===undefined) return fail(-32600,'Request ID required');
-    if(m.method==='initialize') return ok({protocolVersion:['2025-03-26','2025-06-18','2025-11-25'].includes(m.params?.protocolVersion)?m.params.protocolVersion:'2025-03-26',capabilities:{tools:{listChanged:false}},serverInfo:{name:'Tavern',version:'1.3.0'},instructions:'Use tavern_list_players to discover the live registered roster. Match rows are associated with player profiles by ID. Confirm any new player name and starting GP with the user before registration. Preserve stable IDs on retries. Historical matches never settle balances. Preserve stable IDs on retries. Baseline statistics describe the time before archived match rows; opening GP cannot be changed. Private archive text remains in this ChatGPT conversation and is administrator-only in the ledger.'});
+    if(m.method==='initialize') return ok({protocolVersion:['2025-03-26','2025-06-18','2025-11-25'].includes(m.params?.protocolVersion)?m.params.protocolVersion:'2025-03-26',capabilities:{tools:{listChanged:false}},serverInfo:{name:'Tavern',version:'1.4.0'},instructions:'Use tavern_list_players to discover the live registered roster. Match rows are associated with player profiles by ID. Confirm any new player name and starting GP with the user before registration. Set the public cheater badge only after explicit administrator confirmation; do not infer it from private records. Preserve stable IDs on retries. Historical matches never settle balances. Baseline statistics describe the time before archived match rows; opening GP cannot be changed. Private archive text remains in this ChatGPT conversation and is administrator-only in the ledger.'});
     if(m.method==='ping') return ok({});
     if(m.method==='tools/list') return ok({tools});
     if(m.method!=='tools/call') return fail(-32601,'Method not found');
     const name=m.params?.name,args=m.params?.arguments??{};
     if(!tools.some(t=>t.name===name)) return fail(-32602,'Unknown tool');
     let payload;
-    try { if(name==='tavern_record_match') payload=validateMatch(args); else if(name==='tavern_register_player') payload=validateRegistration(args); else if(name==='tavern_record_historical_match') payload=validateHistorical(args); else if(name==='tavern_update_history_baseline') payload=validateBaseline(args); else if(name==='tavern_record_private_archive') payload=validatePrivate(args); else if(name==='tavern_get_player_profile') {exactObject(args,profileProperties,['player_id']);if(!validPlayerId(args.player_id))throw Error('Invalid player ID');payload={};} else if(Object.keys(args).length) throw Error('Unexpected arguments'); }
+    try { if(name==='tavern_record_match') payload=validateMatch(args); else if(name==='tavern_register_player') payload=validateRegistration(args); else if(name==='tavern_set_player_cheater') payload=validateCheaterStatus(args); else if(name==='tavern_record_historical_match') payload=validateHistorical(args); else if(name==='tavern_update_history_baseline') payload=validateBaseline(args); else if(name==='tavern_record_private_archive') payload=validatePrivate(args); else if(name==='tavern_get_player_profile') {exactObject(args,profileProperties,['player_id']);if(!validPlayerId(args.player_id))throw Error('Invalid player ID');payload={};} else if(Object.keys(args).length) throw Error('Unexpected arguments'); }
     catch(e){return fail(-32602,e.message);}
     const token=req.headers.get('Authorization')?.match(/^Bearer ([^\s]+)$/i)?.[1];
     const publicRead=['tavern_scoreboard','tavern_list_players','tavern_get_player_profile'].includes(name);
     if(!publicRead && !await authorized(token)) return challenge();
     try {
-      const rpcName={tavern_scoreboard:'scoreboard',tavern_list_players:'scoreboard',tavern_get_player_profile:'scoreboard',tavern_register_player:'register_player',tavern_record_match:'record_match',tavern_record_historical_match:'record_historical_match',tavern_update_history_baseline:'update_history_baseline',tavern_record_private_archive:'record_private_archive'}[name];
+      const rpcName={tavern_scoreboard:'scoreboard',tavern_list_players:'scoreboard',tavern_get_player_profile:'scoreboard',tavern_register_player:'register_player',tavern_set_player_cheater:'set_player_cheater',tavern_record_match:'record_match',tavern_record_historical_match:'record_historical_match',tavern_update_history_baseline:'update_history_baseline',tavern_record_private_archive:'record_private_archive'}[name];
       const data=await rpc(rpcName,payload??{},publicRead?undefined:token);
-      if(!publicRead && data!==(name==='tavern_update_history_baseline'?args.player_id:name==='tavern_record_private_archive'?args.record_id:args.request_id)) throw Error('Receipt mismatch; verify ledger before retrying');
+      if(!publicRead && data!==(['tavern_update_history_baseline','tavern_set_player_cheater'].includes(name)?args.player_id:name==='tavern_record_private_archive'?args.record_id:args.request_id)) throw Error('Receipt mismatch; verify ledger before retrying');
       let result=data;
-      if(name==='tavern_list_players') result={players:(data.players||[]).map(({id,name,net_gp,max_score,appearances,gambles,history_complete})=>({id,name,net_gp,max_score,appearances,gambles,history_complete}))};
+      if(name==='tavern_list_players') result={players:(data.players||[]).map(({id,name,net_gp,max_score,appearances,gambles,history_complete,is_cheater})=>({id,name,net_gp,max_score,appearances,gambles,history_complete,is_cheater:is_cheater===true}))};
       if(name==='tavern_get_player_profile') {
         const player=(data.players||[]).find(p=>p.id===args.player_id);
         if(!player) throw Error('Player not found in the public ledger. List registered players and retry.');
-        result={player:{id:player.id,name:player.name,net_gp:player.net_gp,max_score:player.max_score,appearances:player.appearances,gambles:player.gambles,history_complete:player.history_complete},matches:(data.matches||[]).filter(m=>m.a===player.id||m.b===player.id).map(({id,a,b,score_a,score_b,stake,settles_balance,played_on,created_at})=>({id,a,b,score_a,score_b,stake,settles_balance,played_on,created_at}))};
+        result={player:{id:player.id,name:player.name,net_gp:player.net_gp,max_score:player.max_score,appearances:player.appearances,gambles:player.gambles,history_complete:player.history_complete,is_cheater:player.is_cheater===true},matches:(data.matches||[]).filter(m=>m.a===player.id||m.b===player.id).map(({id,a,b,score_a,score_b,stake,settles_balance,played_on,created_at})=>({id,a,b,score_a,score_b,stake,settles_balance,played_on,created_at}))};
       }
       if(name==='tavern_record_match') result={match_id:data,status:'recorded',player_a:args.player_a,player_b:args.player_b,delta_a:args.score_a===args.score_b?0:args.score_a>args.score_b?args.net_gp:-args.net_gp,delta_b:args.score_a===args.score_b?0:args.score_a>args.score_b?-args.net_gp:args.net_gp};
       if(name==='tavern_register_player') result={player_id:args.player_id,name:args.name.trim(),status:'registered'};
+      if(name==='tavern_set_player_cheater') result={player_id:data,is_cheater:args.is_cheater,status:'updated'};
       if(name==='tavern_record_historical_match') result={match_id:data,status:'archived_without_settlement',player_a:args.player_a,player_b:args.player_b};
       if(name==='tavern_update_history_baseline') result={player_id:data,status:'baseline_updated'};
       if(name==='tavern_record_private_archive') result={record_id:data,status:'stored_privately'};
@@ -154,4 +165,3 @@ export function createHandler({baseUrl,publishableKey,resource,allowedClientIds=
     } catch(e) { return ok({content:[{type:'text',text:e.name==='TimeoutError'?'Outcome unknown. Check the ledger and retry with the SAME UUID and payload.':e.message}],isError:true}); }
   };
 }
-
