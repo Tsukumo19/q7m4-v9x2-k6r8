@@ -21,13 +21,13 @@
 - 等额下注，公布总点数较高者净赚一份赌注，低者损失同额，平局退回。允许 0 GP，步长 0.5 GP。真实点数仅供管理员审阅。
 - 出场次数计已完成比赛；赌局次数计其中下注大于 0 的比赛（包括平局）。尚未投骰不计数。
 - 历史最高点数、出场和赌局次数不完整时不虚构；已录新场次用 `+` 标明是下限。历史补齐后，管理员通过 SQL 校正 players 的 opening_* 字段并将 history_complete 设为 true。只补基线，不把旧比赛作为新结算录入。
-- 榜单不显示选手状态或胜负战绩。最近比赛记录只含公开点数及赌注；秘密通过单独 RPC 且必须有管理员白名单。
+- 排行榜显示公开胜负场次，胜数绿色、负数红色；作弊者单列在 DUNCE 列表，出场次数位置显示“作弊”。最近比赛记录只含公开点数及净盈亏金额；秘密通过单独 RPC 且必须有管理员白名单。
 - 提交 UUID 防止同一表单因断网重试而重复记账。录入错误暂由管理员通过 SQL 更正或删除对应比赛及 secrets；没有开放公共修改接口。
 - `db/historical-archive.sql` 是已有项目的增量迁移：现存比赛默认保持结算；历史比赛计入公布点数/出场统计但不结算余额。`played_on` 是原比赛日期，`was_gamble` 可为空表示未知。历史基线只补空值，基线不包含迁移后单独归档的比赛；`opening_gp` 不可由聊天工具修改。
 - Tavern MCP 提供管理员 OAuth 保护的历史比赛、统计基线和私密档案写入。聊天 OAuth 只能写，不能调用 `admin_records()` 读回私密信息；私密工具内容也会留在提交它的 ChatGPT 对话中。私密档案仍可由管理员网页读取。
 - `db/register-player.sql` 是新增选手功能的增量迁移，只创建私有幂等回执表和管理员白名单保护的 `register_player` RPC；不会预先插入选手或更改既有记录。注册必须确认唯一 ID、公开名称和起始 GP。新选手的历史最高分、出场与赌局统计保持未知，后续比赛按动态 ID 绑定个人档案。聊天工具重试时沿用同一 UUID 和资料。
 - `db/public-cheater-badge.sql` 只给现有选手增加默认关闭的公开“作弊者”标记，并给公开排行榜增加该布尔字段；不会预先把任何人标为作弊者。管理员经 Tavern OAuth 工具 `tavern_set_player_cheater` 明确设置或清除标记，不依据私密档案或比赛次数自动推断。网页只用公开字段显示红色称号。
-- `db/public-win-loss-counts.sql` 只扩展公开排行榜的已录比赛胜负汇总，不改比赛或余额。网页隐藏赌局次数，改为显示按公布点数计算的胜 / 负场次；平局不计胜负。选手的公开对局清单从档案按钮打开浮窗。
+- `db/public-win-loss-counts.sql` 只扩展公开排行榜的胜负汇总，不改比赛或余额。网页隐藏赌局次数，按公布点数显示胜 / 负场次；平局不计胜负。点击选手名字直接打开含公开档案与个人对局的悬浮窗。Tavern 插件读取接口同样把作弊者与排行榜分开，不输出赌局次数字段。
 
 ## 权限核验（连接后必做）
 
@@ -40,3 +40,4 @@
 - [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Supabase 数据库函数与权限](https://supabase.com/docs/guides/database/functions)
 - [GitHub Pages 工作流](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+
