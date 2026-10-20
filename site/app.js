@@ -9,7 +9,7 @@ function render(){
   const list=$('#ranking');list.replaceChildren();
   [...state.players].sort((a,b)=>b.net_gp-a.net_gp||a.id.localeCompare(b.id)).forEach((p,i)=>{
     const row=el('article','','player');row.append(el('span',String(i+1).padStart(2,'0'),'rank'));
-    const name=el('button',p.name,'name profile-link');name.type='button';name.dataset.playerId=p.id;name.setAttribute('aria-label',`查看 ${p.name} 的选手档案`);row.append(name);
+    const name=el('button',p.name,'name profile-link');name.type='button';name.dataset.playerId=p.id;name.setAttribute('aria-label',`查看 ${p.name} 的选手档案${p.is_cheater?'，作弊者':''}`);if(p.is_cheater)name.append(el('span','作弊者','cheater-badge'));row.append(name);
     [['净盈亏 / GP',money(p.net_gp),p.net_gp>=0?'positive':'negative'],['最高点数',p.max_score??'待补录',''],['出场次数',count(p.appearances,p.history_complete),''],['赌局次数',count(p.gambles,p.history_complete),'']].forEach(([label,value,cls])=>{const m=el('div','','metric');m.append(el('strong',String(value),cls),el('small',label));row.append(m);});list.append(row);
   });
   const history=$('#history');history.replaceChildren();
@@ -24,17 +24,28 @@ function renderProfile(){
   const player=state.players.find(p=>p.id===selectedPlayerId);
   panel.hidden=!player;
   if(!player)return;
-  const title=el('div','','section-title');title.append(el('h2',`${player.name} · 选手档案`));
+  const title=el('div','','section-title');const heading=el('h2',`${player.name} · 选手档案`);if(player.is_cheater)heading.append(el('span','作弊者','cheater-badge'));title.append(heading);
   const close=el('button','收起档案','profile-close');close.type='button';close.onclick=()=>{selectedPlayerId=null;renderProfile();};title.append(close);panel.append(title);
   const metrics=el('div','','profile-metrics');
   [['净盈亏 / GP',money(player.net_gp),player.net_gp>=0?'positive':'negative'],['最高点数',player.max_score??'待补录',''],['出场次数',count(player.appearances,player.history_complete),''],['赌局次数',count(player.gambles,player.history_complete),'']].forEach(([label,value,cls])=>{const m=el('div','','metric');m.append(el('strong',String(value),cls),el('small',label));metrics.append(m);});
-  panel.append(metrics,el('p','以下为账簿可提供的最近 100 场比赛中的个人记录。真实骰点和管理员私密备注不会显示。','muted'));
+  panel.append(metrics);
   const matches=state.matches.filter(m=>m.a===player.id||m.b===player.id).sort((a,b)=>new Date(b.played_on||b.created_at)-new Date(a.played_on||a.created_at));
-  if(!matches.length){panel.append(el('p','当前公开记录中还没有这位选手的比赛。','muted'));return;}
+  const menu=el('details','','profile-matches');const summary=el('summary','','profile-matches-summary');summary.append(el('span','个人对局清单'),el('small',`${matches.length} 场公开记录`));menu.append(summary);
+  const list=el('div','','profile-match-list');menu.append(list);panel.append(menu);
+  if(!matches.length){list.append(el('p','暂无公开对局。','muted'));return;}
   for(const m of matches){
     const isA=m.a===player.id,opponentId=isA?m.b:m.a,opponent=state.players.find(p=>p.id===opponentId)?.name||opponentId;
-    const score=isA?`${m.score_a} : ${m.score_b}`:`${m.score_b} : ${m.score_a}`;
-    const row=el('article','','record');row.append(el('strong',`${player.name} ${score} ${opponent}`),el('p',m.settles_balance===false?'历史赛程 · 不重复结算':`比赛记录 · ${m.stake} GP 净额`),el('small',m.played_on||new Date(m.created_at).toLocaleString('zh-CN')));panel.append(row);
+    const ownScore=isA?m.score_a:m.score_b,otherScore=isA?m.score_b:m.score_a;
+    const ownResult=ownScore>otherScore?'win':ownScore<otherScore?'loss':'draw';
+    const opponentResult=ownResult==='win'?'loss':ownResult==='loss'?'win':'draw';
+    const row=el('article','','profile-match');
+    const pair=el('div','','profile-match-pair');
+    for(const [name,score,result] of [[player.name,ownScore,ownResult],[opponent,otherScore,opponentResult]]){
+      const side=el('div','','profile-match-side');const crest=el('span',name.slice(0,2),'player-crest');crest.setAttribute('aria-hidden','true');
+      side.append(crest,el('span',name,'profile-match-name'),el('strong',String(score),`profile-score ${result}`));pair.append(side);
+    }
+    pair.children[1].classList.add('opponent');row.append(pair);
+    const meta=el('div','','profile-match-meta');meta.append(el('span',ownResult==='win'?'胜':ownResult==='loss'?'负':'平',`match-outcome ${ownResult}`),el('span',m.settles_balance===false?'历史赛程':`${m.stake} GP 净额`),el('time',m.played_on||new Date(m.created_at).toLocaleDateString('zh-CN')));row.append(meta);list.append(row);
   }
 }
 async function api(path,body,method='POST',auth=token){
