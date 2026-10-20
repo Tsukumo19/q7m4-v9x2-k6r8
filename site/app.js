@@ -1,21 +1,41 @@
 import {initial} from './seed.js';
 import {settle,money} from './rules.js';
 const $=s=>document.querySelector(s), cfg=window.TAVERN_CONFIG;
-let state=initial, token=null, requestId=crypto.randomUUID();
+let state=initial, token=null, requestId=crypto.randomUUID(), selectedPlayerId=null;
 const configured=Boolean(cfg?.url&&cfg?.publishableKey);
 function el(tag,text,cls){const e=document.createElement(tag);e.textContent=text;if(cls)e.className=cls;return e;}
 function count(n,complete){return n===null?'待补录':`${n}${complete?'':'+'}`;}
 function render(){
   const list=$('#ranking');list.replaceChildren();
   [...state.players].sort((a,b)=>b.net_gp-a.net_gp||a.id.localeCompare(b.id)).forEach((p,i)=>{
-    const row=el('article','','player');row.append(el('span',String(i+1).padStart(2,'0'),'rank'),el('span',p.name,'name'));
+    const row=el('article','','player');row.append(el('span',String(i+1).padStart(2,'0'),'rank'));
+    const name=el('button',p.name,'name profile-link');name.type='button';name.dataset.playerId=p.id;name.setAttribute('aria-label',`查看 ${p.name} 的选手档案`);row.append(name);
     [['净盈亏 / GP',money(p.net_gp),p.net_gp>=0?'positive':'negative'],['最高点数',p.max_score??'待补录',''],['出场次数',count(p.appearances,p.history_complete),''],['赌局次数',count(p.gambles,p.history_complete),'']].forEach(([label,value,cls])=>{const m=el('div','','metric');m.append(el('strong',String(value),cls),el('small',label));row.append(m);});list.append(row);
   });
   const history=$('#history');history.replaceChildren();
   for(const n of state.notices||[])history.append(el('p',n,'muted'));
   for(const m of state.matches){const row=el('article','','record');const name=id=>state.players.find(p=>p.id===id)?.name||id;const historical=m.settles_balance===false;const [da,db]=settle(m.score_a,m.score_b,Number(m.stake));row.append(el('strong',`${name(m.a)} ${m.score_a} : ${m.score_b} ${name(m.b)}`),el('p',historical?'历史赛程 · 不重复结算':`胜负净额 ${m.stake} GP · ${name(m.a)} ${money(da)} / ${name(m.b)} ${money(db)} GP`),el('small',m.played_on||new Date(m.created_at).toLocaleString('zh-CN')));history.append(row);}
   for(const sel of document.querySelectorAll('select')){const old=sel.value;sel.replaceChildren();for(const p of state.players){const o=el('option',p.name);o.value=p.id;sel.append(o);}if(old)sel.value=old;}
+  renderProfile();
   if(!$('#result select[name=b]').dataset.ready){$('#result select[name=b]').selectedIndex=6;$('#result select[name=a]').selectedIndex=4;$('#result select[name=b]').dataset.ready='1';}
+}
+function renderProfile(){
+  const panel=$('#player-profile');panel.replaceChildren();
+  const player=state.players.find(p=>p.id===selectedPlayerId);
+  panel.hidden=!player;
+  if(!player)return;
+  const title=el('div','','section-title');title.append(el('h2',`${player.name} · 选手档案`));
+  const close=el('button','收起档案','profile-close');close.type='button';close.onclick=()=>{selectedPlayerId=null;renderProfile();};title.append(close);panel.append(title);
+  const metrics=el('div','','profile-metrics');
+  [['净盈亏 / GP',money(player.net_gp),player.net_gp>=0?'positive':'negative'],['最高点数',player.max_score??'待补录',''],['出场次数',count(player.appearances,player.history_complete),''],['赌局次数',count(player.gambles,player.history_complete),'']].forEach(([label,value,cls])=>{const m=el('div','','metric');m.append(el('strong',String(value),cls),el('small',label));metrics.append(m);});
+  panel.append(metrics,el('p','以下为账簿可提供的最近 100 场比赛中的个人记录。真实骰点和管理员私密备注不会显示。','muted'));
+  const matches=state.matches.filter(m=>m.a===player.id||m.b===player.id).sort((a,b)=>new Date(b.played_on||b.created_at)-new Date(a.played_on||a.created_at));
+  if(!matches.length){panel.append(el('p','当前公开记录中还没有这位选手的比赛。','muted'));return;}
+  for(const m of matches){
+    const isA=m.a===player.id,opponentId=isA?m.b:m.a,opponent=state.players.find(p=>p.id===opponentId)?.name||opponentId;
+    const score=isA?`${m.score_a} : ${m.score_b}`:`${m.score_b} : ${m.score_a}`;
+    const row=el('article','','record');row.append(el('strong',`${player.name} ${score} ${opponent}`),el('p',m.settles_balance===false?'历史赛程 · 不重复结算':`比赛记录 · ${m.stake} GP 净额`),el('small',m.played_on||new Date(m.created_at).toLocaleString('zh-CN')));panel.append(row);
+  }
 }
 async function api(path,body,method='POST',auth=token){
   const r=await fetch(`${cfg.url.replace(/\/$/,'')}${path}`,{method,headers:{apikey:cfg.publishableKey,'Content-Type':'application/json',...(auth?{Authorization:`Bearer ${auth}`}:{})},...(method==='GET'?{}:{body:JSON.stringify(body)})});
@@ -28,6 +48,7 @@ async function refresh(){
 }
 async function secrets(){const data=await api('/rest/v1/rpc/admin_records',{});$('#secrets').replaceChildren();for(const r of data){const item=el('div','','record');item.append(el('strong',r.label),el('p',r.detail));$('#secrets').append(item);}if(!data.length)$('#secrets').append(el('p','暂无私密记录。'));}
 $('#refresh').onclick=refresh;
+$('#ranking').onclick=e=>{const button=e.target.closest('button[data-player-id]');if(!button)return;selectedPlayerId=button.dataset.playerId;renderProfile();$('#player-profile').scrollIntoView({behavior:'smooth',block:'start'});};
 $('#login').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;$('#admin-message').textContent='正在核验管理员权限…';try{if(!configured)throw new Error('先连接 Supabase，预览不能登录。');const f=new FormData(e.target);const result=await api('/auth/v1/token?grant_type=password',{email:f.get('email'),password:f.get('password')},'POST',null);token=result.access_token;await secrets();$('#desk').hidden=false;$('#login').hidden=true;e.target.reset();$('#admin-message').textContent='已登录。登录仅在当前页面有效。';}catch(err){token=null;$('#admin-message').textContent=err.message;}finally{b.disabled=false;}};
 $('#logout').onclick=async()=>{try{if(token)await api('/auth/v1/logout',{});}catch{}finally{token=null;$('#desk').hidden=true;$('#login').hidden=false;$('#secrets').replaceChildren();$('#result').reset();$('#admin-message').textContent='已退出，私密记录已清除。';}};
 $('#result').oninput=()=>{const f=new FormData($('#result'));try{if(f.get('score_a')===''||f.get('score_b')==='')return;const [a,b]=settle(Number(f.get('score_a')),Number(f.get('score_b')),Number(f.get('stake')));$('#calculation').textContent=`甲 ${money(a)} GP / 乙 ${money(b)} GP${a===0&&b===0?'（平局或无赌注）':''}`;}catch(e){$('#calculation').textContent=e.message;}};
