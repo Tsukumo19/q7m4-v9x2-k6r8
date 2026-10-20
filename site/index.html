@@ -5,7 +5,8 @@
 <header><a class="brand" href="./">骰 / 酒馆账簿</a><button id="refresh" type="button">刷新账簿</button></header>
 <main>
 <p id="connection" role="status">正在同步…</p>
-<section aria-labelledby="ranking-title"><div class="section-title"><h1 id="ranking-title">排行榜</h1><span>净收益排序 · GP</span></div><div id="ranking"></div><section id="player-profile" aria-live="polite" aria-label="选手档案" hidden></section><details><summary>统计口径</summary><p>最高点数取公布值；出场次数计已完成比赛；赌局次数计下注大于 0 的比赛。待补录：历史不全；+：已知下限。</p></details></section>
+<section aria-labelledby="ranking-title"><div class="section-title"><h1 id="ranking-title">排行榜</h1><span>净收益排序 · GP</span></div><div id="ranking"></div><section id="player-profile" aria-live="polite" aria-label="选手档案" hidden></section><details><summary>统计口径</summary><p>最高点数取公布值；胜负场次按已录入比赛的公布点数统计，平局不计胜负。待补录：历史不全；+：已知下限。</p></details></section>
+<dialog id="match-dialog" class="match-dialog" aria-labelledby="match-dialog-title"><div class="match-dialog-header"><div><h2 id="match-dialog-title"></h2><p id="match-dialog-summary" class="muted"></p></div><button id="match-dialog-close" type="button" aria-label="关闭对局窗口">×</button></div><div id="match-dialog-list" class="profile-match-list"></div></dialog>
 <section aria-labelledby="history-title"><div class="section-title"><h2 id="history-title">比赛记录</h2><span>最近 100 条</span></div><div id="history"></div></section>
 <details id="admin"><summary>管理员</summary>
 <form id="login"><label>管理员邮箱<input name="email" type="email" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button>登录</button></form>
@@ -13,4 +14,3 @@
 </main>
 <script src="config.js"></script><script type="module" src="app.js"></script>
 </body></html>
-
